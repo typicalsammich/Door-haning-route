@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>VAA Door Hanger Routes - Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;display:flex;flex-direction:column;height:100vh}
+header{background:#1f4e5f;color:#fff;padding:10px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header h1{margin:0;font-size:17px;white-space:nowrap}
+.prog{flex:1;min-width:140px;height:10px;background:rgba(255,255,255,.25);border-radius:6px;overflow:hidden}
+.prog>div{height:100%;background:#51cf66;width:0%;transition:width .2s}
+#progtxt{font-size:13px;white-space:nowrap}
+header button{background:#fff;border:0;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;color:#1f4e5f;font-weight:600}
+header button:hover{background:#e7f5ff}
+main{flex:1;display:flex;min-height:0}
+#side{width:380px;max-width:92vw;background:#f8f9fa;border-right:1px solid #dee2e6;display:flex;flex-direction:column;min-height:0}
+#tabs{display:flex;border-bottom:1px solid #dee2e6}
+#tabs button{flex:1;padding:10px;border:0;background:#e9ecef;font-size:14px;font-weight:700;cursor:pointer}
+#tabs button.active{background:#f8f9fa;border-bottom:3px solid #1f6feb}
+#search{margin:10px 12px 4px;padding:8px 10px;border:1px solid #ced4da;border-radius:6px;font-size:14px;width:calc(100% - 24px)}
+#routebar{padding:8px 12px 0}
+#routebar .prog{background:#e9ecef}
+#routebar .prog>div{background:#1f6feb}
+#routetxt{font-size:12px;color:#555;margin-top:4px}
+#list{flex:1;overflow-y:auto;padding:6px 12px 20px}
+details.cluster{border:1px solid #dee2e6;border-radius:8px;margin:8px 0;background:#fff;overflow:hidden}
+details.cluster summary{padding:10px;cursor:pointer;font-weight:700;font-size:13px;list-style:none;display:flex;gap:8px;align-items:center}
+details.cluster summary::-webkit-details-marker{display:none}
+.cnum{background:#1f6feb;color:#fff;border-radius:50%;min-width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:12px}
+.cnum.done{background:#2f9e44}
+.cmeta{margin-left:auto;font-size:11px;color:#666;font-weight:400;white-space:nowrap}
+.biz{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-top:1px solid #f1f3f5;font-size:13px;cursor:pointer}
+.biz:hover{background:#f1f8ff}
+.biz input{margin-top:3px;transform:scale(1.25);accent-color:#2f9e44;flex-shrink:0}
+.biz .sn{color:#868e96;font-weight:700;min-width:30px}
+.biz.done .bname{text-decoration:line-through;color:#868e96}
+.biz .addr{color:#666;font-size:12px}
+#mapwrap{flex:1;position:relative;min-width:0}
+#map{height:100%;width:100%}
+#sideToggle{display:none;position:absolute;top:12px;left:12px;z-index:1000;background:#fff;border:1px solid #ccc;border-radius:8px;padding:8px 12px;font-size:14px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.2)}
+.num-label{background:transparent;border:none;font-weight:800;font-size:13px;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff,0 0 3px #fff}
+.popup-biz{font-size:12px;line-height:1.45;max-height:260px;overflow-y:auto}
+.popup-biz table{border-collapse:collapse;width:100%}
+.popup-biz td{padding:2px 6px 2px 0;vertical-align:top}
+.popup-biz .sn{color:#666;font-weight:bold;white-space:nowrap}
+.hide{display:none!important}
+@media (max-width:760px){
+  #side{position:absolute;z-index:1000;height:100%;box-shadow:2px 0 12px rgba(0,0,0,.25);transform:translateX(-105%);transition:transform .25s}
+  #side.open{transform:none}
+  #sideToggle{display:block}
+}
+</style></head><body>
+<header>
+  <h1>VAA Door Hangers</h1>
+  <div class="prog"><div id="pbar"></div></div>
+  <span id="progtxt">0 / 0 done</span>
+  <button id="btnExport">Export progress</button>
+  <button id="btnImport">Import</button>
+  <button id="btnReset">Reset</button>
+  <input type="file" id="fileImp" accept=".json" class="hide">
+</header>
+<main>
+  <aside id="side">
+    <div id="tabs">
+      <button id="tabA" class="active">Route A</button>
+      <button id="tabB">Route B</button>
+    </div>
+    <input id="search" type="search" placeholder="Search businesses...">
+    <div id="routebar"><div class="prog"><div id="rbar"></div></div><div id="routetxt"></div></div>
+    <div id="list"></div>
+  </aside>
+  <div id="mapwrap">
+    <button id="sideToggle">&#9776; Checklist</button>
+    <div id="map"></div>
+  </div>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+var D = {"routes": {"A": [{"name": "Menifee Town Center (Newport Rd / Haun Rd)", "first": 1, "n": 16, "lat": 33.68396, "lon": -117.15178, "biz": [[1, "Sweet Red Peach", "29101 Newport Rd Ste 105", "Bakery"], [2, "Zesty Shawarma And Grill", "29101 Newport Rd", "Restaurant (Mediterranean)"], [3, "Esta Nail Spa", "27559 Newport Rd #130", "Nail Salon"], [4, "Leading Edge Learning Center", "27192 Newport Rd", "Tutoring center"], [5, "Hawes Real Estate & Property Management", "27186 Newport Rd Ste b-1", "Property management company"], [6, "Menifee Tax Group", "27186 Newport Rd Ste 2", "Independent tax preparation office"], [7, "Menifee Valley Animal Clinic", "26900 Newport Rd Ste 105", "Veterinary clinic"], [8, "Himalayan Taste Indian Cuisine", "26900 Newport Rd 124 & 125", "Restaurant (Indian)"], [9, "Cal True Value", "26100 Newport Rd Ste A-134", "Independent hardware store"], [10, "Mi Pueblo Mexican Food", "26100 Newport Rd A 10", "Restaurant (Mexican)"], [11, "Red Persimmon Nails & Spa", "26025 Newport Rd #B", "Nail Salon"], [12, "New Look Cleaners", "25908 Newport Rd H", "Dry cleaner"], [13, "Amber Management Co", "29826 Haun Rd Ste 305", "Property management company"], [14, "Nail Bar", "29966 Haun Rd #2C", "Nail Salon"], [15, "Menifee Animal Hospital", "30406 Haun Rd Ste 730", "Veterinary clinic"], [16, "Kahilla Coffee", "30450 Haun Rd", "Coffee shop"]]}, {"name": "Bradley Rd Corridor", "first": 17, "n": 22, "lat": 33.71675, "lon": -117.19079, "biz": [[17, "McNeal & Associates Insurance", "27851 Bradley Rd Ste 100", "Independent insurance agency"], [18, "Sun City Veterinary Clinic", "27994 Bradley Rd Ste J", "Veterinary clinic"], [19, "Ruiz Grappling Academy", "27994 Bradley Rd Ste K", "Martial arts school"], [20, "Fashion Statement", "28085 Bradley Rd", "Hair Salon"], [21, "Rapid Print Solutions", "28095 Bradley Rd", "Print Shop"], [22, "Hannoush Insurance Agency", "28125 Bradley Rd Suite 250", "Independent insurance agency"], [23, "MalibuGift Chocolaterie & Espresso", "28236 Bradley Rd", "Chocolate shop / espresso bar / gifts"], [24, "Sides Auto Repair", "29750 Bradley Rd", "Auto Repair"], [25, "Los De Santiagos Auto Body", "29770 Bradley Rd", "Collision / Auto Body"], [26, "Damian Tires", "29770 Bradley Rd Space D", "Tire Shop"], [27, "Menifee Transmission and Auto Repair", "29770 Bradley Rd Ste A&B", "Transmission & Auto Repair"], [28, "Advanced Emission Specialist (AES Smog)", "29770 Bradley Rd Ste C", "Smog Check & Auto Repair"], [29, "Blake's Auto Repair", "29770 Bradley Rd Ste F", "Auto Repair"], [30, "Joe's Engine Repair", "29770 Bradley Rd Ste I", "Auto Repair"], [31, "Tri-City Smog", "29770 Bradley Rd Ste J", "Smog Check Station"], [32, "J's Barbershop", "29800 Bradley Rd #104", "Barbershop"], [33, "Mom & Pop's Frame Shop", "29800 Bradley Rd #108", "Frame Shop"], [34, "WOW Wireless Cell Phone Repair", "29800 Bradley Rd Ste 102", "Phone Repair"], [35, "Pete's Music & Guitar Shop", "29800 Bradley Rd Ste 107", "Music Store"], [36, "Cognizant HR and Tax", "29800 Bradley Rd Ste 114", "Independent tax/accounting office"], [37, "Heaven Scent Flowers & Gifts", "29800 Bradley Rd Ste 114", "Florist"], [38, "Menifee Threading Studio", "29800 Bradley Rd Ste 121", "Threading Studio"]]}, {"name": "Antelope Rd Plazas", "first": 39, "n": 11, "lat": 33.68571, "lon": -117.16898, "biz": [[39, "Composure Massage Therapy", "29787 Antelope Rd #100", "Massage Therapy"], [40, "CDL Tattoos", "29787 Antelope Rd Ste 100 Studio #24", "Tattoo Studio"], [41, "Crestline Portables", "29787 Antelope Rd Ste 107", "Equipment rental office"], [42, "In The City Beauty Supply", "29787 Antelope Rd Ste 107", "Beauty Supply"], [43, "Menifee Barbershop and Shaving Parlor", "30123 Antelope Rd", "Barbershop"], [44, "KCD Electric", "30141 Antelope Rd", "Electrical contractor"], [45, "S.I.S. Business Services", "30141 Antelope Rd D723", "Independent tax preparation office"], [46, "Jim Appliance Repair", "30141 Antelope Rd Ste D", "Appliance Repair"], [47, "VIR Plumbing", "30141 Antelope Rd Ste D", "Plumbing contractor"], [48, "Simon Says Systems", "30141 Antelope Rd Ste D 135", "Computer Repair"], [49, "Menifee Cleaners", "30141E Antelope Rd", "Dry cleaner"]]}, {"name": "Ethanac Rd Auto Complex", "first": 50, "n": 9, "lat": 33.74244, "lon": -117.18414, "biz": [[50, "Tint Monsters Menifee", "27271 Ethanac Rd", "Window Tinting"], [51, "Top Tech Smog Check", "27271 Ethanac Rd #102", "Smog Check Station"], [52, "Husky Flooring & Carpet", "27271 Ethanac Rd Ste 100", "Flooring showroom"], [53, "Top Tech Auto & Sons", "27271 Ethanac Rd Ste 103", "Auto Repair"], [54, "Gencorp Auto Body Shop", "27271 Ethanac Rd Ste 105", "Collision / Auto Body & Tires"], [55, "Ethanac Smog", "27411 Ethanac Rd", "Smog Check Station"], [56, "Long's Automotive", "27411 Ethanac Rd", "Auto Repair"], [57, "Menifee Collision Center", "27793 Jackson Ave", "Collision / Auto Body"], [58, "Amesha Performance", "25190 Jackson Ave", "Auto Repair / Performance"]]}, {"name": "Sun City (Sun City Blvd / Cherry Hills)", "first": 59, "n": 16, "lat": 33.7109, "lon": -117.19297, "biz": [[59, "SCR Insurance Agency", "27070 Sun City Blvd", "Independent insurance agency"], [60, "Menifee Property Management", "27070 Sun City Blvd Ste 103", "Property management company"], [61, "Golden Hair Cuts", "27192 Sun City Blvd D", "Hair Salon"], [62, "Shear Edge Hair Salon", "27388 Sun City Blvd Ste B", "Hair Salon"], [63, "Simple Select Insurance Agency", "27388 Sun City Blvd Ste C", "Independent insurance agency"], [64, "Holistic Healing Massage", "27388 Sun City Blvd Ste D", "Massage Therapy"], [65, "Essence Amour Beauty Supply", "27388 Sun City Blvd Ste H", "Beauty Supply"], [66, "T.R.I.M. Fitness Menifee", "26812 Cherry Hills Blvd", "Gym / fitness center"], [67, "Millan's Barbershop", "26820 Cherry Hills Blvd #5", "Barbershop"], [68, "Sun City Florist & Gifts", "26820 Cherry Hills Blvd Ste 6", "Florist"], [69, "El Camino Insurance Agency", "26838 Cherry Hills Blvd", "Independent insurance agency"], [70, "Casa Jimenez Menifee", "26862 Cherry Hills Blvd", "Restaurant (Mexican)"], [71, "Sun City Fabricare Laundromat", "26866 Cherry Hills Blvd", "Laundromat / dry cleaner"], [72, "Joyful Noise Coffee", "26924 Cherry Hills Blvd", "Cafe / coffee shop"], [73, "New Hub Auto Service", "29683 New Hub Dr Ste B", "Auto Repair"], [74, "CrossFit 951", "29723 New Hub Dr Ste G", "Gym / CrossFit affiliate"]]}, {"name": "Scott Rd Plaza", "first": 75, "n": 6, "lat": 33.64002, "lon": -117.17459, "biz": [[75, "Lucky Star Nails & Spa", "27701 Scott Rd", "Nail Salon"], [76, "MJ Granite Stone & Tile", "27701 Scott Rd #203", "Countertop / stone showroom"], [77, "Fence Company Menifee", "27701 Scott Rd STE 110", "Fence company (public office)"], [78, "Headliners Barbershop", "27701 Scott Rd Ste 304", "Barbershop"], [79, "Checkmat Menifee", "27701 Scott Rd Suite 102", "Martial arts school"], [80, "Scott Cleaners", "28039 Scott Rd Ste B", "Dry cleaner"]]}, {"name": "Murrieta Hot Springs Rd / Madison Ave", "first": 81, "n": 11, "lat": 33.55527, "lon": -117.15915, "biz": [[81, "Final Strike Martial Arts", "39520 Murrieta Hot Springs Rd Suite 224", "Martial arts studio"], [82, "FeFe's Grooming Salon", "39540 Murrieta Hot Springs Rd Ste 232", "Pet Grooming"], [83, "Perky Petals Florist", "40119 Murrieta Hot Springs Rd Suite C101", "Florist"], [84, "All Discount Insurance Services Inc.", "25021 Madison St #103", "Insurance agency"], [85, "Savon Carpet & Tile", "25090 Madison Ave", "Flooring showroom"], [86, "Valley Hot Spring Spas", "25098 Madison Ave", "Pool & spa showroom"], [87, "Salon SoVa", "25155 Madison Ave Ste 103", "Hair Salon"], [88, "Leather and Home Interiors", "25195 Madison Ave Suite 107", "Furniture/mattress store"], [89, "ARTillery Ink", "25285 Madison Ave #111", "Tattoo & Piercing Studio"], [90, "Super Discount Mattress Warehouse", "25320 Madison Ave Suite G", "Mattress store"], [91, "JI Phone Repair Murrieta", "25341 Madison Ave #104", "Phone/electronics repair"]]}, {"name": "Jefferson Ave Corridor", "first": 92, "n": 20, "lat": 33.56042, "lon": -117.20901, "biz": [[92, "Town Square Cleaners", "24660 Jefferson Ave", "Dry cleaner"], [93, "Bailey's Garden Party", "24740 Jefferson Ave", "Party supply & rentals"], [94, "DIY Appliance Parts", "24831 Jefferson Ave Suite 105", "Appliance parts retail"], [95, "Jensen Property Management", "25090 Jefferson Ave", "Property management office"], [96, "Murrieta Animal Hospital", "25095 Jefferson Ave", "Veterinary clinic"], [97, "New Season Properties", "25096 Jefferson Ave", "Property management office"], [98, "The Luxx Barbershop", "25425 Jefferson Ave Suite 104", "Barbershop"], [99, "DF Kitchen & Flooring", "25687 Jefferson Ave Ste 1", "Kitchen/flooring showroom"], [100, "Carmel Mountain Cabinetry", "25695 Jefferson Ave Ste 14", "Cabinet/kitchen showroom"], [101, "Ikon Auto Collision", "25695 Jefferson Ave building B unit 7", "Collision / Auto Body"], [102, "Andy's Glass & Window Company", "25751 Jefferson Ave", "Window & door showroom"], [103, "California Car Care", "25807 Jefferson Ave #150", "Auto Repair"], [104, "Endless Autosalon", "26015 Jefferson Ave", "Window Tint / Wraps / Detailing"], [105, "ER Cabinetry Corp", "26043 Jefferson Ave #9C", "Cabinet showroom"], [106, "Affordable Window Coverings", "26043 Jefferson Ave #D", "Window coverings showroom"], [107, "Nalas Grooming", "26440 Jefferson Ave", "Pet Grooming"], [108, "Trumotive", "26450 Jefferson Ave Suite 105", "Auto Repair"], [109, "Inland Auto", "26500 Jefferson Ave Ste a", "Auto Repair / Smog"], [110, "Jefferson Smog", "26622 Jefferson Ave", "Smog Check Station"], [111, "Tintman Window Tinting and Paint Protection", "26658 Jefferson Ave #106", "Window Tint / Paint Protection"]]}, {"name": "Old Town Murrieta", "first": 112, "n": 20, "lat": 33.55585, "lon": -117.21708, "biz": [[112, "Lizarraga Insurance Agency", "24619 Washington Ave Suite 205", "Insurance agency"], [113, "Abide Home Shoppe", "24629 Washington Ave", "Home decor boutique"], [114, "The Crafted Scone", "24630 Washington Ave #101", "Bakery-cafe"], [115, "Copy-Rite", "24630 Washington Ave Ste 104", "Print/copy shop"], [116, "The Dime Studio", "24710 Washington Ave #2", "Hair Salon / Barbershop"], [117, "The Shootist", "24910 Washington Ave #100-101", "Specialty retail (firearms)"], [118, "James H. Houle, CPA", "24973 Washington Ave", "Tax/accounting office"], [119, "Murrieta Flooring", "24986 Washington Ave", "Flooring showroom"], [120, "Cool Comfort Window Tinting", "41658 Ivy St Suite #106", "Window Tint / Auto Glass"], [121, "S&S Windows and Doors", "41658 Ivy St Suite 109", "Window & door showroom"], [122, "Studio 1 Hair Salon", "41667 Ivy St Suite B", "Hair Salon"], [123, "Murrieta Tire And Auto Repair", "41991 Ivy St", "Auto Repair / Tire Shop"], [124, "The Crafted Stache Barbershop", "41539 Kalmia St", "Barbershop"], [125, "Stage 2 Cyclery", "41539 Kalmia St #119", "Bicycle shop"], [126, "The Haircut Company", "41539 Kalmia St Ste 112", "Hair Salon"], [127, "Leslie A Doherty and Co. CPA", "41880 Kalmia St Ste 170", "Tax/accounting office"], [128, "Hagar Insurance", "41891 Kalmia St", "Insurance agency"], [129, "Old Town Veterinary Hospital", "41891 Kalmia St Ste C", "Veterinary clinic"], [130, "Smog Test Murrieta", "41590 Date St Unit 102", "Smog Check Station"], [131, "The Screen Queens", "41615 Date St #102", "Window screen showroom"]]}, {"name": "California Oaks Rd", "first": 132, "n": 3, "lat": 33.57349, "lon": -117.20269, "biz": [[132, "Pampered Pooch Spa & Bowtique", "40585 California Oaks Rd", "Pet Grooming"], [133, "Cal Oaks Auto Repair", "40648 California Oaks Rd STE B", "Auto Repair"], [134, "Payd 2 Fade Barber Shop", "40685 California Oaks Rd", "Barbershop"]]}, {"name": "Wildomar (Clinton Keith Rd)", "first": 135, "n": 9, "lat": 33.58819, "lon": -117.25283, "biz": [[135, "Bear Creek Realty", "32475 Clinton Keith Rd #106", "Real Estate Brokerage"], [136, "Wildomar Insurance", "32395 Clinton Keith Rd", "Insurance Agency"], [137, "Carlson Gracie Inland Valley", "32326 Clinton Keith Rd Unit 102", "Martial Arts School"], [138, "Undisputed Barbers", "32326 Clinton Keith Rd Ste 107", "Barber Shop"], [139, "Lavish Locks Salon & Boutique", "32294 Clinton Keith Rd Ste 103", "Hair Salon & Boutique"], [140, "SGB Insurance Services", "32100 Clinton Keith Rd Ste G", "Insurance Agency"], [141, "Stew's Barber Shop", "32100 Clinton Keith Rd Ste B", "Barber Shop"], [142, "Shear Envy Salon", "23905 Clinton Keith Rd Ste 113", "Hair Salon"], [143, "Los Reyes Bar and Grill", "23865 Clinton Keith Rd", "Mexican Restaurant / Bar & Grill"]]}, {"name": "Wildomar (Palomar St / Hidden Springs)", "first": 144, "n": 10, "lat": 33.61771, "lon": -117.29018, "biz": [[144, "Fast Lane Tires", "34885 Mission Trail B", "Tire Dealer & Repair Shop"], [145, "Tresino's Fresh Italian", "36068 Hidden Springs Rd", "Italian Restaurant"], [146, "Print Postal", "36068 Hidden Springs Rd Ste C", "Printing & Shipping Service"], [147, "Angelo's Brick Oven Pizzeria", "36370 Hidden Springs Rd", "Italian Restaurant / Pizzeria"], [148, "IMM Automotive", "21299 Palomar St", "Auto Repair Shop"], [149, "L & F Tire & Wheel", "21299 Palomar St", "Tire Dealer & Repair Shop"], [150, "Smog Star Inc", "21299 Palomar St", "Smog Emissions Check Station"], [151, "Wildomar Wireless", "21465 Palomar St #3", "Mobile Phone Shop"], [152, "Reflections Barbershop", "21535 Palomar St", "Barber Shop"], [153, "Phone Boyz", "21535 Palomar St Ste D", "Mobile Phone Repair Shop"]]}, {"name": "Lake Elsinore", "first": 154, "n": 12, "lat": 33.65711, "lon": -117.29866, "biz": [[154, "MNE Insurance Agency", "31903 Mission Trail", "Insurance Agency"], [155, "Gerryann's Flowers", "31909 Mission Trail", "Florist"], [156, "Golden Square Insurance Services", "31948 Mission Trl", "Insurance Agency"], [157, "Auto International Insurance", "31952 Mission Trail", "Insurance Agency"], [158, "Pup's N Bubbles", "271 San Jacinto River Rd", "Pet Grooming"], [159, "Royal Barbershop", "283 San Jacinto River Rd", "Barbershop"], [160, "Dolphin Pool & Spa Center", "289 San Jacinto River Rd", "Pool & Spa Supply / Service"], [161, "Leo Beauty Supply", "122 N Main St", "Beauty Supply Store"], [162, "Lake Elsinore Tire & Auto", "420 N Main St", "Tire & Auto Repair"], [163, "Corona Deals Furniture and Mattress Liquidation", "17617 Grand Ave", "Furniture Store"], [164, "J&H Flooring", "18630 Collier Ave Ste O", "Flooring Store"], [165, "Wheel City", "530 Crane St Ste G", "Tire & Wheel Shop / Automotive"]]}, {"name": "Railroad Canyon Rd (Lake Elsinore to Canyon Lake)", "first": 166, "n": 3, "lat": 33.6641, "lon": -117.29719, "biz": [[166, "Modern Image Hair Salon", "371 Railroad Canyon Rd", "Hair Salon"], [167, "Station No. 2 Pizza", "31574 Railroad Canyon Rd", "Restaurant (Pizza)"], [168, "Pepe's Mexican Restaurant & Cantina", "31780 Railroad Canyon Rd", "Restaurant (Mexican)"]]}], "B": [{"name": "Promenade/Winchester Rd Temecula", "first": 1, "n": 8, "lat": 33.52528, "lon": -117.15881, "biz": [[1, "Papaya Clothing", "40820 Winchester Rd Ste 1380", "Women's Clothing"], [2, "Foot Locker", "40820 Winchester Rd Ste 1250", "Shoe Store"], [3, "Vans", "40820 Winchester Rd Ste 2253", "Shoe Store"], [4, "Windsor", "40820 Winchester Rd Ste 2150", "Women's Clothing"], [5, "Oakley", "40820 Winchester Rd Ste 2220", "Sporting Goods / Eyewear"], [6, "Charlotte Russe", "40820 Winchester Rd Ste 1200", "Women's Clothing"], [7, "Sbarro", "40820 Winchester Rd", "Pizza Restaurant"], [8, "Hot Topic", "40820 Winchester Rd", "Clothing / Accessories"]]}, {"name": "Rancho California Rd", "first": 9, "n": 2, "lat": 33.4979, "lon": -117.15531, "biz": [[9, "Level Up Barbershop", "28751 Rancho California Rd, Ste 101", "Barber Shop"], [21, "Lucky Feet Shoes", "29700 Rancho California Rd", "Shoe Store"]]}, {"name": "Rancho California Rd / Temecula Center", "first": 10, "n": 10, "lat": 33.50605, "lon": -117.14738, "biz": [[10, "Target", "27540 Ynez Rd", "Superstore"], [11, "Vons", "27540 Ynez Rd", "Grocery"], [12, "CVS Pharmacy", "27540 Ynez Rd", "Pharmacy"], [13, "HomeGoods", "27540 Ynez Rd", "Home Decor Retail"], [14, "Chase Bank", "27540 Ynez Rd", "Bank"], [15, "Starbucks Coffee", "27540 Ynez Rd", "Coffee Shop"], [16, "Subway", "27540 Ynez Rd", "Sandwich Shop"], [17, "Salon 29", "27540 Ynez Rd", "Hair Salon"], [18, "Little Caesars Pizza", "27540 Ynez Rd", "Pizza Restaurant"], [19, "Daphne's Cafe", "27540 Ynez Rd", "Restaurant"]]}, {"name": "Rancho California Rd / Ynez Rd", "first": 20, "n": 1, "lat": 33.5058, "lon": -117.15245, "biz": [[20, "Trining's Bakery & Cafe", "27473 Ynez Rd, Ste A", "Bakery & Filipino Cafe"]]}, {"name": "Temecula Pkwy / Redhawk Towne Center", "first": 22, "n": 12, "lat": 33.47935, "lon": -117.09648, "biz": [[22, "Famous Footwear", "32155 Temecula Pkwy Ste B", "Shoe Store"], [23, "Ross Dress for Less", "32155 Temecula Pkwy", "Discount Department Store"], [24, "Marshalls", "32155 Temecula Pkwy", "Discount Department Store"], [25, "Kohl's", "32155 Temecula Pkwy", "Department Store"], [26, "Walmart", "32155 Temecula Pkwy", "Supercenter"], [27, "Bath & Body Works", "32155 Temecula Pkwy", "Beauty / Body Care Retail"], [28, "Sally Beauty Supply", "32155 Temecula Pkwy", "Beauty Supply Retail"], [29, "T-Mobile", "32155 Temecula Pkwy", "Wireless Retail"], [30, "Great Clips", "32155 Temecula Pkwy", "Hair Salon"], [31, "IHOP", "32155 Temecula Pkwy", "Restaurant"], [32, "Five Guys Burgers and Fries", "32155 Temecula Pkwy", "Restaurant"], [33, "Chipotle Mexican Grill", "32155 Temecula Pkwy", "Restaurant"]]}, {"name": "Temecula Pkwy", "first": 34, "n": 1, "lat": 33.48441, "lon": -117.08347, "biz": [[34, "The Bike Shop", "32835 Temecula Pkwy", "Bicycle Shop"]]}, {"name": "Old Town Front St", "first": 35, "n": 9, "lat": 33.49242, "lon": -117.14706, "biz": [[35, "Old Town Tire and Service", "28700 Old Town Front St", "Tire & Auto Repair"], [36, "Kyle Fried Realty", "28545 Old Town Front St", "Real Estate Brokerage"], [37, "Mooody Boutique", "28410 Old Town Front St, Ste 110", "Boutique / Vintage Goods"], [38, "The Nifty Gift", "28480 Old Town Front St", "Gift Shop"], [39, "The Farmacy", "28480 Old Town Front St, Unit B", "Wellness / Natural Products"], [40, "La Favorita Ranch Market", "28266 Old Town Front St", "Specialty Grocery"], [41, "Emmanuel's Filipino Restaurant & Bakery", "28290 Old Town Front St", "Restaurant & Bakery"], [42, "Mr. Tint", "28822 Old Town Front St #106", "Auto Window Tinting"], [43, "Faith Auto Glass & Window Tinting", "28860 Old Town Front St, Suite C-6", "Auto Glass & Tinting"]]}, {"name": "Jefferson Ave corridor", "first": 44, "n": 4, "lat": 33.51102, "lon": -117.15703, "biz": [[44, "Best Friend Financial Tax and Immigration Services", "27780 Jefferson Ave, Ste 12", "Tax & Immigration"], [45, "The Gent's Tradition", "28061 Jefferson Ave, Ste 5", "Barber Shop"], [46, "Temecula Auto Glass & Window Tinting", "28061 Jefferson Ave, Ste 6", "Auto Glass & Tinting"], [47, "Dark Helmet Tattoo Co.", "28120 Jefferson Ave, Unit B206", "Tattoo Studio"]]}, {"name": "Via Dos Picos auto park", "first": 48, "n": 4, "lat": 33.50446, "lon": -117.16191, "biz": [[48, "Agape Auto Repair", "43216 Via Dos Picos, Ste A", "Auto Repair"], [49, "Frankies Tires and Brakes", "43122 Via Dos Picos, Ste A", "Tire Dealer & Repair"], [50, "J & L Trans & Auto Repair", "43122 Via Dos Picos, Ste E", "Transmission & Auto Repair"], [51, "Temecula European Auto Repair", "43186 Via Dos Picos, Ste B", "Auto Repair (European)"]]}, {"name": "Cherry Hills corridor Sun City", "first": 52, "n": 5, "lat": 33.71092, "lon": -117.18997, "biz": [[52, "Dollar Tree", "26932 Cherry Hills Blvd", "Discount Store"], [53, "Domino's Pizza", "26920 Cherry Hills Blvd", "Pizza Restaurant"], [54, "Neighborhood Healthcare", "26926 Cherry Hills Blvd Ste B", "Medical Clinic"], [55, "Sun City Family Restaurant", "26824 Cherry Hills Blvd", "Diner"], [56, "Merna's Cafe & Grill", "26850 Cherry Hills Blvd", "Mediterranean Cafe"]]}, {"name": "Sun City Blvd corridor", "first": 57, "n": 3, "lat": 33.71155, "lon": -117.1924, "biz": [[57, "Stater Bros. Markets", "27160 Sun City Blvd", "Grocery"], [58, "Los Ninos Taqueria Mexican Restaurant", "27192 Sun City Blvd", "Mexican Restaurant"], [59, "Vons", "27220 Sun City Blvd", "Grocery"]]}, {"name": "Bradley Rd Sun City", "first": 60, "n": 3, "lat": 33.71446, "lon": -117.19082, "biz": [[60, "Sun City Tire", "28200 Bradley Rd", "Tire & Auto Repair"], [61, "Sun Lube & Repair", "29770 Bradley Rd Ste G", "Auto Repair"], [62, "Asian Mini Mart", "29800 Bradley Rd Ste 106", "Grocery / Mini Mart"]]}, {"name": "Perris Marketplace", "first": 63, "n": 7, "lat": 33.80432, "lon": -117.22636, "biz": [[63, "America's Best Contacts and Eyeglasses", "1700 N Perris Blvd", "Optical Retail"], [64, "Pacific Dental", "1700 N Perris Blvd", "Dental Office"], [65, "Great Clips", "1700 N Perris Blvd", "Hair Salon"], [66, "Dickey's BBQ", "1700 N Perris Blvd", "BBQ Restaurant"], [67, "Chipotle", "1700 N Perris Blvd", "Fast-Casual Restaurant"], [68, "Jamba Juice", "1700 N Perris Blvd", "Smoothie Shop"], [69, "Yogurtland", "1700 N Perris Blvd", "Frozen Yogurt Shop"]]}, {"name": "Perris Blvd corridor", "first": 70, "n": 3, "lat": 33.80926, "lon": -117.2257, "biz": [[70, "Honesty Registration & Insurance Services", "2055 N Perris Blvd, Ste G5", "Insurance & Registration"], [71, "Walsh Insurance", "2055 N Perris Blvd, #E8", "Insurance Agency"], [72, "R and E One Stop Insurance Pro Services", "2131 N Perris Blvd, #C-3a", "Insurance & DMV Services"]]}, {"name": "Nuevo Rd Perris", "first": 73, "n": 3, "lat": 33.80301, "lon": -117.22651, "biz": [[73, "Hammer Insurance Services - Perris", "1688 N Perris Blvd, Suite D6A", "Insurance Agency"], [74, "Food 4 Less", "1688 N Perris Blvd", "Grocery Store"], [75, "Jasmin's General Insurance Services", "135 W Nuevo Rd, Ste E", "Insurance Agency"]]}, {"name": "Perris downtown", "first": 76, "n": 4, "lat": 33.78538, "lon": -117.22753, "biz": [[76, "Benjy's Auto Body", "121 E 1st St, Ste A", "Auto Body Shop"], [77, "A & R Automotive", "121 E 1st St", "Auto Repair & Body Shop"], [78, "Mundo Vaquero", "329 S D St", "Western Clothing & Hats"], [79, "Perris Animal Hospital", "257 E 4th St", "Veterinary Clinic"]]}, {"name": "W 4th St Perris", "first": 80, "n": 2, "lat": 33.78264, "lon": -117.24103, "biz": [[80, "Eddie's Mufflers & General Auto Repair", "680 W 4th St", "Muffler & Auto Repair"], [81, "Marin Realty Group", "246 W 4th St", "Real Estate Brokerage"]]}, {"name": "Wilkerson Ave business park", "first": 82, "n": 3, "lat": 33.7861, "lon": -117.22112, "biz": [[82, "L & S Auto Works", "20 Wilkerson Ave, Ste B4", "Auto Repair Shop"], [83, "Gallardo's Transmissions", "20 Wilkerson Ave, Ste B6", "Transmission & Auto Repair"], [84, "Becerra's Body & Paint", "20 Wilkerson Ave, Ste B2", "Auto Body & Paint"]]}, {"name": "S G St Perris", "first": 85, "n": 1, "lat": 33.7749, "lon": -117.22237, "biz": [[85, "B & J Auto Center", "1122 S G St, Ste A", "Auto Repair Shop"]]}, {"name": "Florida Ave Hemet", "first": 86, "n": 5, "lat": 33.74574, "lon": -117.0104, "biz": [[86, "Royal Foot Spa", "3639 W Florida Ave", "Foot Spa / Massage"], [87, "Mia's Country Kitchen", "3323 W Florida Ave", "American Breakfast Restaurant"], [88, "Antonious Pizza", "3327 W Florida Ave", "Pizza Restaurant"], [103, "Top Dog Grooming Salon", "1779 E Florida Ave, Ste C3", "Pet Grooming Salon"], [104, "Little Angies Restaurant", "2110 E Florida Ave", "Breakfast Diner"]]}, {"name": "Hemet Valley Mall", "first": 89, "n": 5, "lat": 33.74871, "lon": -116.99467, "biz": [[89, "Daniel's Jewelers", "2200 W Florida Ave", "Jewelry Store"], [90, "Deb's Barber & Salon", "2200 W Florida Ave", "Barber / Salon"], [91, "Don Roberto Jewelers", "2200 W Florida Ave", "Jewelry Store"], [92, "Magic Brow", "2200 W Florida Ave", "Beauty / Brow Studio"], [93, "Oh Nails", "2200 W Florida Ave", "Nail Salon"]]}, {"name": "Esplanade Ave Hemet", "first": 94, "n": 2, "lat": 33.77254, "lon": -116.97591, "biz": [[94, "Hands of Mercy Day Spa", "463 W Esplanade Ave", "Day Spa / Massage"], [95, "Rancho Vet Tack Feed & Supply", "625 W Esplanade Ave", "Pet Feed & Supply Retail"]]}, {"name": "E Florida Ave downtown Hemet", "first": 96, "n": 5, "lat": 33.7478, "lon": -116.97136, "biz": [[96, "Traditions Barber Shop", "104 E Florida Ave", "Barber Shop"], [97, "The Legends Barber", "207 E Florida Ave", "Barber Shop"], [98, "JJ's Barbershop", "231 E Florida Ave", "Barber Shop"], [99, "Oryz Family Restaurant", "306 E Florida Ave", "Family Restaurant / Diner"], [100, "Downtown Parlor Barber Shop", "408 E Florida Ave", "Barber Shop"]]}, {"name": "Downtown Hemet", "first": 101, "n": 1, "lat": 33.74793, "lon": -116.97574, "biz": [[101, "Hemet Tire & Wheel", "114 N Gilbert St", "Tire Dealer & Off-Road Shop"]]}, {"name": "N Palm Ave Hemet", "first": 102, "n": 1, "lat": 33.75622, "lon": -116.9808, "biz": [[102, "Rapid Tire & Automotive", "551 N Palm Ave", "Tire & Auto Repair"]]}, {"name": "Winchester Rd Hemet", "first": 105, "n": 1, "lat": 33.72179, "lon": -117.07623, "biz": [[105, "Jolenes Country Kitchen", "27400 Winchester Rd", "Country Diner"]]}, {"name": "W Esplanade Ave San Jacinto", "first": 106, "n": 1, "lat": 33.7734, "lon": -116.96223, "biz": [[106, "O's Tires & Wheels", "375 W Esplanade Ave", "Tire & Wheel Shop"]]}, {"name": "Ramona Blvd corridor", "first": 107, "n": 2, "lat": 33.79515, "lon": -116.97196, "biz": [[107, "Fernandez Tires", "861 N Ramona Blvd, Ste D", "Tire Dealer"], [108, "Juan's Automotive", "861 N Ramona Blvd, Ste C", "Auto Repair Shop"]]}, {"name": "San Jacinto Ave corridor", "first": 109, "n": 6, "lat": 33.77968, "lon": -116.95945, "biz": [[109, "Dollar General", "700 S San Jacinto Ave", "Dollar Store"], [110, "Gonzalez Wheel and Tires", "1015 S San Jacinto Ave", "Tire Dealer"], [111, "S and S Tires", "1019 S San Jacinto Ave", "Tire Dealer"], [113, "Ram's Outlet", "1520 S San Jacinto Ave", "Discount / Outlet Retail"], [116, "Emilio's Mexican Restaurant & Cantina", "2340 S San Jacinto Ave", "Mexican Restaurant"], [117, "The Good Egg Family Restaurant", "2563 S San Jacinto Ave", "Family Restaurant / Diner"]]}, {"name": "San Jacinto Center", "first": 112, "n": 1, "lat": 33.77403, "lon": -116.95821, "biz": [[112, "Cardenas Markets", "1475 S San Jacinto Ave", "Grocery / Supermarket"]]}, {"name": "Walmart center San Jacinto Ave", "first": 114, "n": 2, "lat": 33.76812, "lon": -116.95817, "biz": [[114, "GameStop", "1821 S San Jacinto Ave", "Video Game Retail"], [115, "El Pollo Loco", "1881 S San Jacinto Ave", "Fast Food Chicken"]]}, {"name": "S State St San Jacinto", "first": 118, "n": 2, "lat": 33.78129, "lon": -116.97206, "biz": [[118, "Star Auto Parts", "570 S State St", "Auto Parts & Machine Shop"], [119, "J&J's Diner", "690 S State St", "Diner"]]}, {"name": "N State St San Jacinto", "first": 120, "n": 1, "lat": 33.80366, "lon": -116.97308, "biz": [[120, "Dollar Tree", "1250 N State Street", "Dollar Store"]]}]}, "start": {"lat": 33.68824, "lon": -117.22566, "address": "24848 Solvang Lane, Menifee CA 92587"}};
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+var LSKEY='vaa-routes-progress-v1';
+var P={A:{},B:{}};
+try{var raw=localStorage.getItem(LSKEY);if(raw)P=JSON.parse(raw);}catch(e){P={A:{},B:{}};}
+function save(){try{localStorage.setItem(LSKEY,JSON.stringify(P));}catch(e){}}
+var counts={A:0,B:0};
+['A','B'].forEach(function(r){D.routes[r].forEach(function(c){counts[r]+=c.n;});});
+var total=counts.A+counts.B;
+
+var map=L.map('map').setView([33.68,-117.15],10);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:20,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'}).addTo(map);
+var colors={A:'#1f6feb',B:'#e8590c'};
+var groups={}, markers={};
+['A','B'].forEach(function(r){
+  groups[r]=L.layerGroup().addTo(map);
+  markers[r]=[];
+  var pts=[];
+  D.routes[r].forEach(function(c,i){
+    pts.push([c.lat,c.lon]);
+    var rows=c.biz.map(function(b){
+      var done=P[r][b[0]];
+      return '<tr><td class="sn">'+b[0]+'</td><td>'+(done?'&#10003; ':'')+'<b>'+esc(b[1])+'</b><br><span style="color:#555">'+esc(b[2])+' - '+esc(b[3])+'</span></td></tr>';
+    }).join('');
+    var popup='<b>Route '+r+' - cluster '+(i+1)+' of '+D.routes[r].length+'</b><br><b>'+esc(c.name)+'</b> ('+c.n+' businesses, starts at stop #'+c.first+')<div class="popup-biz"><table>'+rows+'</table></div>';
+    var mk=L.circleMarker([c.lat,c.lon],{radius:11,color:'#fff',weight:2,fillColor:colors[r],fillOpacity:1}).addTo(groups[r]);
+    mk.bindPopup(popup,{maxWidth:340});
+    var tip=L.tooltip({permanent:true,direction:'center',className:'num-label',offset:[0,0]}).setContent(String(i+1));
+    mk.bindTooltip(tip);
+    markers[r].push({mk:mk,tip:tip,cluster:c,idx:i});
+  });
+  L.polyline(pts,{color:colors[r],weight:2.5,opacity:.55,dashArray:'6 6'}).addTo(groups[r]);
+});
+L.marker([D.start.lat,D.start.lon],{title:'Start'}).addTo(map).bindPopup('<b>Start point</b><br>'+esc(D.start.address));
+var all=D.routes.A.concat(D.routes.B);
+var bounds=L.latLngBounds(all.map(function(c){return [c.lat,c.lon];}));
+bounds.extend([D.start.lat,D.start.lon]);
+map.fitBounds(bounds.pad(0.08));
+L.control.layers(null,{'Route A':groups.A,'Route B':groups.B},{collapsed:false}).addTo(map);
+
+function clusterDone(r,c){var d=0;c.biz.forEach(function(b){if(P[r][b[0]])d++;});return d;}
+function refreshMarkers(){
+  ['A','B'].forEach(function(r){
+    markers[r].forEach(function(m){
+      var d=clusterDone(r,m.cluster), doneAll=d===m.cluster.n;
+      m.mk.setStyle({fillColor:doneAll?'#2f9e44':colors[r]});
+      m.tip.setContent(doneAll?'\u2713 '+(m.idx+1):(m.idx+1)+(d>0?' ('+d+'/'+m.cluster.n+')':''));
+      var rows=m.cluster.biz.map(function(b){
+        return '<tr><td class="sn">'+b[0]+'</td><td>'+(P[r][b[0]]?'\u2713 ':'')+'<b>'+esc(b[1])+'</b><br><span style="color:#555">'+esc(b[2])+' - '+esc(b[3])+'</span></td></tr>';
+      }).join('');
+      m.mk.setPopupContent('<b>Route '+r+' - cluster '+(m.idx+1)+' of '+D.routes[r].length+'</b><br><b>'+esc(m.cluster.name)+'</b> ('+m.cluster.n+' businesses, starts at stop #'+m.cluster.first+')<div class="popup-biz"><table>'+rows+'</table></div>');
+    });
+  });
+}
+function refreshBars(){
+  var done=0;
+  ['A','B'].forEach(function(r){Object.keys(P[r]).forEach(function(k){if(P[r][k])done++;});});
+  document.getElementById('pbar').style.width=(total?done/total*100:0)+'%';
+  document.getElementById('progtxt').textContent=done+' / '+total+' done';
+  var r=curRoute, rd=0;
+  Object.keys(P[r]).forEach(function(k){if(P[r][k])rd++;});
+  document.getElementById('rbar').style.width=(counts[r]?rd/counts[r]*100:0)+'%';
+  document.getElementById('routetxt').textContent='Route '+r+': '+rd+' / '+counts[r]+' done';
+}
+var curRoute='A';
+function renderList(){
+  var q=document.getElementById('search').value.trim().toLowerCase();
+  var list=document.getElementById('list');list.innerHTML='';
+  D.routes[curRoute].forEach(function(c,i){
+    var d=clusterDone(curRoute,c);
+    var bizRows=c.biz.filter(function(b){
+      return !q||b[1].toLowerCase().indexOf(q)>-1||b[2].toLowerCase().indexOf(q)>-1||b[3].toLowerCase().indexOf(q)>-1;
+    });
+    if(q&&!bizRows.length)return;
+    var det=document.createElement('details');det.className='cluster';
+    var sum=document.createElement('summary');
+    sum.innerHTML='<span class="cnum'+(d===c.n?' done':'')+'">'+(d===c.n?'\u2713':(i+1))+'</span><span>'+esc(c.name)+'</span><span class="cmeta">'+d+'/'+c.n+'</span>';
+    det.appendChild(sum);
+    det.addEventListener('toggle',function(){if(det.open)map.flyTo([c.lat,c.lon],13,{duration:0.8});});
+    bizRows.forEach(function(b){
+      var lab=document.createElement('label');lab.className='biz'+(P[curRoute][b[0]]?' done':'');
+      lab.innerHTML='<input type="checkbox"'+(P[curRoute][b[0]]?' checked':'')+'><span class="sn">'+b[0]+'</span><span><span class="bname"><b>'+esc(b[1])+'</b></span><br><span class="addr">'+esc(b[2])+' \u00b7 '+esc(b[3])+'</span></span>';
+      var cb=lab.querySelector('input');
+      cb.addEventListener('change',function(){
+        P[curRoute][b[0]]=cb.checked;
+        if(!cb.checked)delete P[curRoute][b[0]];
+        lab.classList.toggle('done',cb.checked);
+        save();refreshMarkers();refreshBars();
+        var dd=clusterDone(curRoute,c);
+        sum.querySelector('.cmeta').textContent=dd+'/'+c.n;
+        var cn=sum.querySelector('.cnum');
+        cn.classList.toggle('done',dd===c.n);
+        cn.textContent=dd===c.n?'\u2713':(i+1);
+      });
+      det.appendChild(lab);
+    });
+    list.appendChild(det);
+  });
+  refreshBars();
+}
+document.getElementById('tabA').addEventListener('click',function(){curRoute='A';this.classList.add('active');document.getElementById('tabB').classList.remove('active');document.getElementById('search').value='';renderList();});
+document.getElementById('tabB').addEventListener('click',function(){curRoute='B';this.classList.add('active');document.getElementById('tabA').classList.remove('active');document.getElementById('search').value='';renderList();});
+document.getElementById('search').addEventListener('input',renderList);
+document.getElementById('sideToggle').addEventListener('click',function(){document.getElementById('side').classList.toggle('open');});
+document.getElementById('btnReset').addEventListener('click',function(){
+  if(confirm('Clear all checkmarks for both routes?')){P={A:{},B:{}};save();refreshMarkers();renderList();}
+});
+document.getElementById('btnExport').addEventListener('click',function(){
+  var blob=new Blob([JSON.stringify(P)],{type:'application/json'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='vaa-routes-progress.json';a.click();
+});
+document.getElementById('btnImport').addEventListener('click',function(){document.getElementById('fileImp').click();});
+document.getElementById('fileImp').addEventListener('change',function(e){
+  var f=e.target.files[0];if(!f)return;
+  var rd=new FileReader();
+  rd.onload=function(){try{var p=JSON.parse(rd.result);if(p.A&&p.B){P=p;save();refreshMarkers();renderList();alert('Progress imported.');}else alert('That file does not look like a progress export.');}catch(err){alert('Could not read that file.');}};
+  rd.readAsText(f);e.target.value='';
+});
+refreshMarkers();renderList();
+</script></body></html>
